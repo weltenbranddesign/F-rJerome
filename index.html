@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Schreiben">
+<meta name="theme-color" content="#ffffff">
+<title>Handschrift zu Sprache</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+
+  :root { --bar: calc(96px + env(safe-area-inset-bottom)); }
+
+  /* Schreibfeld endet oberhalb der Knopfleiste */
+  #text {
+    position: fixed; top: 0; left: 0; right: 0; bottom: var(--bar); width: 100%;
+    border: none; outline: none; resize: none; color: #0f172a; font-family: inherit;
+    font-size: 34px; line-height: 56px;
+    padding: calc(28px + env(safe-area-inset-top)) calc(32px + env(safe-area-inset-right))
+             28px calc(32px + env(safe-area-inset-left));
+    background-color: transparent;
+    background-image: repeating-linear-gradient(to bottom,
+      transparent 0, transparent 55px, #e2e8f0 55px, #e2e8f0 56px);
+    background-attachment: local;
+    background-position: 0 calc(28px + env(safe-area-inset-top));
+  }
+  #text::placeholder { color: #94a3b8; }
+
+  /* Eigene Leiste – liegt NICHT über dem Schreibfeld, sonst fängt „Kritzeln" die Stift-Tipps ab */
+  #controls {
+    position: fixed; left: 0; right: 0; bottom: 0; height: var(--bar);
+    padding: 0 calc(16px + env(safe-area-inset-right)) env(safe-area-inset-bottom) calc(16px + env(safe-area-inset-left));
+    display: flex; gap: 8px; align-items: center; justify-content: flex-end; z-index: 10;
+    background: #f8fafc; border-top: 1px solid #e2e8f0;
+  }
+  #controls button {
+    border: none; border-radius: 999px; height: 64px; padding: 0 22px;
+    font-size: 18px; font-weight: 700; color: #fff; font-family: inherit; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,.18); -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation; -webkit-user-select: none; user-select: none;
+  }
+  #controls button:active { filter: brightness(.85); }
+  #gear { background: #e2e8f0 !important; color: #334155 !important; width: 64px; padding: 0 !important; font-size: 24px !important; }
+  #clear { background: #dc2626; }
+  #again { background: #16a34a; }
+  #done  { background: #1d4ed8; font-size: 20px !important; padding: 0 28px !important; }
+
+  #settings {
+    position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(var(--bar) + 8px); z-index: 11;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.2); display: none;
+  }
+  #settings.open { display: block; }
+  #settings p { font-size: 14px; color: #475569; margin-bottom: 8px; }
+  #voice { font-size: 16px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 10px;
+    background: #fff; max-width: 300px; }
+
+  #toast {
+    position: fixed; top: calc(16px + env(safe-area-inset-top)); left: 50%;
+    transform: translateX(-50%); z-index: 12; pointer-events: none;
+    padding: 12px 20px; border-radius: 999px; color: #fff; font-size: 17px; font-weight: 600;
+    box-shadow: 0 6px 18px rgba(0,0,0,.2); opacity: 0; transition: opacity .25s; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+  #toast.ok { background: #16a34a; }
+  #toast.err { background: #dc2626; }
+
+  /* iPhone und schmale Bildschirme */
+  @media (max-width: 600px) {
+    :root { --bar: calc(72px + env(safe-area-inset-bottom)); }
+    #text { font-size: 22px; line-height: 38px;
+      padding: calc(20px + env(safe-area-inset-top)) 18px 20px 18px;
+      background-image: repeating-linear-gradient(to bottom,
+        transparent 0, transparent 37px, #e2e8f0 37px, #e2e8f0 38px);
+      background-position: 0 calc(20px + env(safe-area-inset-top)); }
+    #controls { gap: 6px; padding-left: 10px; padding-right: 10px; justify-content: center; }
+    #controls button { height: 52px; padding: 0 14px; font-size: 15px; }
+    #gear { width: 52px; font-size: 20px !important; }
+    #done { padding: 0 18px !important; font-size: 16px !important; }
+    #settings { right: 10px; }
+    #toast { font-size: 15px; white-space: normal; text-align: center; width: max-content; max-width: 90vw; }
+  }
+</style>
+</head>
+<body>
+  <textarea id="text" lang="de" spellcheck="true" autocorrect="on" autocapitalize="sentences"
+    placeholder="Hier schreiben …"></textarea>
+
+  <div id="settings">
+    <p>Stimme</p>
+    <select id="voice"></select>
+  </div>
+
+  <div id="controls">
+    <button id="gear" aria-label="Stimme wählen">⚙︎</button>
+    <button id="clear">Löschen</button>
+    <button id="again">Nochmal</button>
+    <button id="done">Fertig ✓</button>
+  </div>
+
+  <div id="toast"></div>
+
+<script>
+(function () {
+  var ta = document.getElementById('text');
+  var sel = document.getElementById('voice');
+  var settings = document.getElementById('settings');
+  var controls = document.getElementById('controls');
+  var toastEl = document.getElementById('toast');
+  var synth = window.speechSynthesis;
+  var voices = [];
+  var toastTimer = null;
+
+  // ---------- Hinweise ----------
+  function toast(msg, type) {
+    toastEl.textContent = msg;
+    toastEl.className = 'show ' + type;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.className = type; }, 4000);
+  }
+
+  // ---------- Stimmen ----------
+  function scoreVoice(v) {
+    var n = v.name.toLowerCase();
+    var s = 0;
+    if (n.indexOf('premium') !== -1) s += 4;
+    if (n.indexOf('enhanced') !== -1 || n.indexOf('erweitert') !== -1 || n.indexOf('verbessert') !== -1) s += 3;
+    if (v.lang.replace('_', '-') === 'de-DE') s += 1;
+    return s;
+  }
+
+  function loadVoices() {
+    if (!synth) return;
+    voices = synth.getVoices().filter(function (v) {
+      return v.lang.toLowerCase().replace('_', '-').indexOf('de') === 0;
+    }).sort(function (a, b) { return scoreVoice(b) - scoreVoice(a); });
+
+    var prev = sel.value;
+    sel.innerHTML = '';
+    if (!voices.length) { sel.add(new Option('Systemstimme', '')); return; }
+    voices.forEach(function (v) { sel.add(new Option(v.name + ' (' + v.lang + ')', v.voiceURI)); });
+    var stillThere = voices.some(function (v) { return v.voiceURI === prev; });
+    sel.value = stillThere ? prev : voices[0].voiceURI;
+  }
+  loadVoices();
+  if (synth) synth.onvoiceschanged = loadVoices;
+
+  function speak(text) {
+    if (!synth || !text) return;
+    synth.cancel();
+    var u = new SpeechSynthesisUtterance(text);
+    var voice = null;
+    for (var i = 0; i < voices.length; i++) if (voices[i].voiceURI === sel.value) voice = voices[i];
+    u.lang = voice ? voice.lang : 'de-DE';
+    if (voice) u.voice = voice;
+    u.rate = 0.95;
+    synth.speak(u);
+  }
+
+  // ---------- Regelbasierte Korrektur ----------
+  var ABBR = ['ca','bzw','usw','ggf','evtl','inkl','vgl','z','d','u','o','v','s','nr','str','hr','fr','dr','etc','zb','bspw','ab'];
+
+  function cleanText(input) {
+    var s = input.replace(/\s+/g, ' ').trim();
+    s = s.replace(/\s+([.,!?;:])/g, '$1');                    // kein Leerzeichen vor Satzzeichen
+    s = s.replace(/([.,!?;:])(?=[A-Za-zÄÖÜäöüß])/g, '$1 ');   // Leerzeichen nach Satzzeichen
+    s = s.replace(/([,;:])\1+/g, '$1');                        // doppelte Kommas etc.
+    s = s.replace(/^([a-zäöü])/, function (c) { return c.toUpperCase(); });
+    var base = s;
+    s = base.replace(/([.!?])(\s+)([a-zäöü])/g, function (m, punct, space, ch, offset) {
+      var before = base.slice(0, offset).match(/(\S+)$/);
+      var word = before ? before[1].toLowerCase().replace(/\./g, '') : '';
+      if (punct === '.' && ABBR.indexOf(word) !== -1) return m; // „ca." usw. nicht anfassen
+      return punct + space + ch.toUpperCase();
+    });
+    return s;
+  }
+
+  // ---------- Buttons ----------
+  document.getElementById('done').addEventListener('click', function () {
+    ta.blur();
+    settings.classList.remove('open');
+    var normalized = ta.value.replace(/\s+/g, ' ').trim();
+    if (!normalized) { toast('Es wurde noch nichts geschrieben.', 'err'); return; }
+    var cleaned = cleanText(normalized);
+    ta.value = cleaned;
+    speak(cleaned);
+    toast(cleaned !== normalized ? 'Vorlesen – Leerzeichen/Großschreibung korrigiert' : 'Wird vorgelesen', 'ok');
+  });
+
+  document.getElementById('again').addEventListener('click', function () {
+    var t = ta.value.trim();
+    if (t) speak(t); else toast('Es gibt noch nichts zum Vorlesen.', 'err');
+  });
+
+  document.getElementById('clear').addEventListener('click', function () {
+    if (synth) synth.cancel();
+    ta.value = '';
+    settings.classList.remove('open');
+  });
+
+  document.getElementById('gear').addEventListener('click', function () {
+    settings.classList.toggle('open');
+  });
+  sel.addEventListener('change', function () { settings.classList.remove('open'); });
+
+  // ---------- Knöpfe über der Bildschirmtastatur halten (iPhone) ----------
+  if (window.visualViewport) {
+    var reposition = function () {
+      var vv = window.visualViewport;
+      var keyboard = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      controls.style.bottom = keyboard > 0 ? (keyboard + 10) + 'px' : '';
+      settings.style.bottom = keyboard > 0 ? (keyboard + 80) + 'px' : '';
+    };
+    window.visualViewport.addEventListener('resize', reposition);
+    window.visualViewport.addEventListener('scroll', reposition);
+  }
+})();
+</script>
+</body>
+</html>
